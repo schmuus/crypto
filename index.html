@@ -390,7 +390,24 @@
   </section>
 
   <section>
-    <h2><span class="idx">07</span> Backup</h2>
+    <h2><span class="idx">07</span> Realisierte Gewinne (Verkäufe)</h2>
+    <div class="panel">
+      <div class="summary-strip" id="realizedSummaryStrip" style="margin:0 0 1rem;"></div>
+      <p class="hint" id="realizedHint" style="display:none;">* nicht bei allen Verkäufen sind Preise bekannt – Summe daher unvollständig.</p>
+      <div class="table-wrap">
+        <table id="realizedTable">
+          <thead>
+            <tr><th>Coin</th><th>Verkaufte Menge</th><th>Ø Verkaufspreis</th><th>Erlös</th><th>Kosten</th><th>G/V</th><th>G/V %</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty-state" id="realizedEmpty" style="display:none;">Noch keine Verkäufe erfasst.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">08</span> Backup</h2>
     <div class="panel">
       <p class="hint" style="margin-top:0;">Alle Daten liegen lokal im Browser (localStorage). Sichere regelmäßig ein Backup als Text.</p>
 
@@ -658,6 +675,7 @@
     renderCoinSummary();
     renderTimeline();
     renderSalesTable();
+    renderRealizedSummary();
     renderLastUpdateLabel();
   }
 
@@ -917,6 +935,81 @@
         persist();
         renderAll();
       });
+    });
+  }
+
+  function renderRealizedSummary(){
+    const byCoin = {};
+    sales.forEach(s => {
+      if(!byCoin[s.coinId]){
+        byCoin[s.coinId] = { amount: 0, proceeds: 0, hasProceeds: true, cost: 0, hasCost: true };
+      }
+      const g = byCoin[s.coinId];
+      g.amount += s.amount;
+
+      if(typeof s.price === "number") g.proceeds += s.price * s.amount;
+      else g.hasProceeds = false;
+
+      const allocs = saleAllocations(s);
+      let saleCost = 0, saleCostKnown = allocs.length > 0;
+      allocs.forEach(a => {
+        const p = purchases.find(pp => pp.id === a.purchaseId);
+        if(p && typeof p.price === "number") saleCost += a.amount * p.price;
+        else saleCostKnown = false;
+      });
+      if(saleCostKnown) g.cost += saleCost;
+      else g.hasCost = false;
+    });
+
+    let totalProceeds = 0, totalCost = 0, hasAllProceeds = true, hasAllCost = true;
+    Object.values(byCoin).forEach(g => {
+      if(g.hasProceeds) totalProceeds += g.proceeds; else hasAllProceeds = false;
+      if(g.hasCost) totalCost += g.cost; else hasAllCost = false;
+    });
+    const totalGV = (hasAllProceeds && hasAllCost) ? totalProceeds - totalCost : null;
+    const totalGVPct = (totalGV !== null && totalCost > 0) ? (totalGV / totalCost) * 100 : null;
+
+    document.getElementById("realizedHint").style.display = (!hasAllProceeds || !hasAllCost) ? "block" : "none";
+
+    const strip = document.getElementById("realizedSummaryStrip");
+    strip.innerHTML = `
+      <div class="summary-cell">
+        <div class="label">Gesamterlös</div>
+        <div class="value">${fmtEUR(totalProceeds)}${hasAllProceeds ? "" : " *"}</div>
+      </div>
+      <div class="summary-cell">
+        <div class="label">Kosten (Anschaffung)</div>
+        <div class="value">${fmtEUR(totalCost)}${hasAllCost ? "" : " *"}</div>
+      </div>
+      <div class="summary-cell">
+        <div class="label">Realisierter G/V</div>
+        <div class="value ${totalGV === null ? "" : (totalGV >= 0 ? "pos" : "neg")}">${totalGV === null ? "–" : fmtEUR(totalGV)}</div>
+        <div class="sub ${totalGVPct === null ? "" : (totalGVPct >= 0 ? "pos" : "neg")}">${totalGVPct === null ? "" : (totalGVPct >= 0 ? "+" : "") + totalGVPct.toFixed(1) + " %"}</div>
+      </div>
+    `;
+
+    const tbody = document.querySelector("#realizedTable tbody");
+    tbody.innerHTML = "";
+    const coinIds = Object.keys(byCoin);
+    document.getElementById("realizedEmpty").style.display = coinIds.length ? "none" : "block";
+
+    coinIds.sort((a,b) => (byCoin[b].proceeds || 0) - (byCoin[a].proceeds || 0)).forEach(id => {
+      const g = byCoin[id];
+      const avgSell = (g.hasProceeds && g.amount > 0) ? g.proceeds / g.amount : null;
+      const gv = (g.hasProceeds && g.hasCost) ? g.proceeds - g.cost : null;
+      const gvPct = (gv !== null && g.cost > 0) ? (gv / g.cost) * 100 : null;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="coin-tag mono">${coinSymbol(id)}</span></td>
+        <td>${fmtAmount(g.amount)}</td>
+        <td>${avgSell !== null ? fmtEUR(avgSell) : "–"}</td>
+        <td>${g.hasProceeds ? fmtEUR(g.proceeds) : "–"}</td>
+        <td>${g.hasCost ? fmtEUR(g.cost) : "–"}</td>
+        <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+        <td class="${gvPct === null ? "" : (gvPct >= 0 ? "pos" : "neg")}">${gvPct === null ? "–" : (gvPct >= 0 ? "+" : "") + gvPct.toFixed(1) + " %"}</td>
+      `;
+      tbody.appendChild(tr);
     });
   }
 
