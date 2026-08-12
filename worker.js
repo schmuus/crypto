@@ -1,10 +1,6 @@
-// Standard Cloudflare Worker (nicht "Pages Functions"-Format) - läuft dank
-// run_worker_first in wrangler.toml IMMER zuerst, bevor irgendeine statische
-// Datei (index.html etc.) ausgeliefert wird.
-//
-// Benutzername/Passwort werden als Umgebungsvariablen im Cloudflare-Dashboard
-// hinterlegt: BASIC_AUTH_USER und BASIC_AUTH_PASS (Settings > Variables and
-// Secrets, für die "Production"-Umgebung).
+// TEMPORÄRE DEBUG-VERSION - zeigt bei falschem Login WARUM es fehlschlägt,
+// ohne das Passwort im Klartext preiszugeben. Nach der Fehlersuche bitte
+// wieder durch die normale Version ersetzen.
 
 export default {
   async fetch(request, env) {
@@ -14,18 +10,34 @@ export default {
     const authHeader = request.headers.get("Authorization");
 
     if (authHeader && authHeader.startsWith("Basic ")) {
-      const decoded = atob(authHeader.slice(6)); // "user:pass"
+      const decoded = atob(authHeader.slice(6));
       const sepIndex = decoded.indexOf(":");
-      const user = decoded.slice(0, sepIndex);
-      const pass = decoded.slice(sepIndex + 1);
+      const enteredUser = decoded.slice(0, sepIndex);
+      const enteredPass = decoded.slice(sepIndex + 1);
 
-      if (user === validUser && pass === validPass) {
-        // Zugriff erlaubt -> statische Datei (index.html etc.) ausliefern
+      if (enteredUser === validUser && enteredPass === validPass) {
         return env.ASSETS.fetch(request);
       }
+
+      const debugInfo = [
+        `env.BASIC_AUTH_USER gesetzt: ${validUser !== undefined}`,
+        `env.BASIC_AUTH_PASS gesetzt: ${validPass !== undefined}`,
+        `Eingegebener Benutzername: "${enteredUser}"`,
+        `Erwarteter Benutzername:   "${validUser}"`,
+        `Benutzername stimmt überein: ${enteredUser === validUser}`,
+        `Länge eingegebenes Passwort: ${enteredPass.length}`,
+        `Länge erwartetes Passwort:   ${validPass ? validPass.length : "n/a"}`,
+        `Passwort stimmt überein (getrimmt): ${enteredPass.trim() === (validPass || "").trim()}`,
+      ].join("\n");
+
+      return new Response("Zugriff verweigert (Debug-Info):\n\n" + debugInfo, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
     }
 
-    // Kein oder falsches Passwort -> Login-Dialog anfordern
     return new Response("Zugriff verweigert.", {
       status: 401,
       headers: {
