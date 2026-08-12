@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krypto-Portfolio Ledger</title>
+<style>
+  :root{
+    --bg:#12141a;
+    --surface:#1b1e27;
+    --surface-2:#232733;
+    --border:#2e3340;
+    --text:#ecece4;
+    --text-muted:#8b92a3;
+    --gold:#c9a227;
+    --gold-soft:#4a4326;
+    --green:#4fae7d;
+    --green-soft:#1c3229;
+    --red:#c1484b;
+    --red-soft:#3a2226;
+    --radius:10px;
+    --shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 20% -10%, rgba(201,162,39,0.08), transparent 40%),
+      var(--bg);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+    padding-bottom:4rem;
+  }
+  .mono{font-family:"SF Mono", "Menlo", "Consolas", monospace;}
+  header.top{
+    padding:2.2rem 1.5rem 1.6rem;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:1rem;
+  }
+  .brand h1{
+    font-family:Georgia,'Times New Roman',serif;
+    font-weight:600;
+    font-size:1.9rem;
+    margin:0;
+    letter-spacing:0.2px;
+  }
+  .brand h1 span{color:var(--gold);}
+  .brand p{margin:.25rem 0 0;color:var(--text-muted);font-size:.88rem;}
+  .price-controls{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;}
+  .price-controls .ts{font-size:.78rem;color:var(--text-muted);}
+  button{
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-weight:600;
+    font-size:.85rem;
+    cursor:pointer;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    color:var(--text);
+    padding:.6rem 1rem;
+    transition:border-color .15s, transform .05s;
+  }
+  button:hover{border-color:var(--gold);}
+  button:active{transform:translateY(1px);}
+  button.primary{
+    background:var(--gold);
+    border-color:var(--gold);
+    color:#1b1a10;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.ghost{background:transparent;}
+  button.danger-ghost{background:transparent;border-color:var(--border);color:var(--red);}
+  button.danger-ghost:hover{border-color:var(--red);}
+
+  main{max-width:1180px;margin:0 auto;padding:0 1.5rem;}
+
+  .summary-strip{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:1px;
+    background:var(--border);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+    margin:1.6rem 0;
+  }
+  .summary-cell{
+    background:var(--surface);
+    padding:1.1rem 1.3rem;
+  }
+  .summary-cell .label{
+    font-size:.72rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--text-muted);
+    margin-bottom:.35rem;
+  }
+  .summary-cell .value{
+    font-family:'SF Mono','Menlo','Consolas',monospace;
+    font-size:1.5rem;
+    font-weight:600;
+  }
+  .summary-cell .value.total{color:var(--gold);}
+  .summary-cell .sub{font-size:.78rem;margin-top:.2rem;}
+  .pos{color:var(--green);}
+  .neg{color:var(--red);}
+
+  section{margin-top:2.6rem;}
+  section > h2{
+    font-family:Georgia,'Times New Roman',serif;
+    font-weight:600;
+    font-size:1.25rem;
+    margin:0 0 1rem;
+    display:flex;
+    align-items:center;
+    gap:.6rem;
+  }
+  section > h2 .idx{
+    font-family:'SF Mono','Menlo','Consolas',monospace;
+    font-size:.75rem;
+    color:var(--gold);
+    border:1px solid var(--gold-soft);
+    background:var(--gold-soft);
+    padding:.15rem .45rem;
+    border-radius:5px;
+  }
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:1.4rem;
+    box-shadow:var(--shadow);
+  }
+
+  form.grid-form{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1rem;
+    align-items:end;
+  }
+  .field{display:flex;flex-direction:column;gap:.35rem;}
+  .field label{font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
+  .field input, .field select, .field textarea{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:7px;
+    padding:.55rem .65rem;
+    font-family:'SF Mono','Menlo','Consolas',monospace;
+    font-size:.82rem;
+  }
+  .field textarea{width:100%;resize:vertical;line-height:1.4;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--gold);outline-offset:1px;}
+  .field.wide{grid-column:span 2;}
+  .hint{font-size:.72rem;color:var(--text-muted);margin-top:-.15rem;}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem;}
+  @media (max-width:820px){.two-col{grid-template-columns:1fr;}}
+
+  table{width:100%;border-collapse:collapse;font-size:.88rem;}
+  thead th{
+    text-align:left;
+    font-size:.72rem;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--text-muted);
+    border-bottom:1px solid var(--border);
+    padding:.5rem .6rem;
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:.65rem .6rem;
+    border-bottom:1px solid var(--border);
+    font-family:'SF Mono','Menlo','Consolas',monospace;
+    white-space:nowrap;
+  }
+  tbody tr:hover{background:var(--surface-2);}
+  .table-wrap{overflow-x:auto;}
+  .coin-tag{
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-weight:600;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    padding:.15rem .5rem;
+    border-radius:6px;
+    font-size:.78rem;
+  }
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.3rem;
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-weight:600;
+    font-size:.75rem;
+    padding:.25rem .55rem;
+    border-radius:20px;
+  }
+  .badge.locked{background:var(--red-soft);color:var(--red);}
+  .badge.unlocked{background:var(--green-soft);color:var(--green);}
+
+  /* signature element: tax-free "ticket stub" */
+  .stub-list{display:flex;flex-direction:column;gap:.6rem;}
+  .stub{
+    position:relative;
+    display:grid;
+    grid-template-columns:1fr auto;
+    align-items:center;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:.85rem 1.1rem;
+    overflow:hidden;
+  }
+  .stub::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:6px;
+    background:repeating-linear-gradient(
+      to bottom, var(--border) 0 6px, transparent 6px 12px
+    );
+  }
+  .stub.unlocked{border-color:var(--green-soft);}
+  .stub.unlocked::before{background:repeating-linear-gradient(to bottom, var(--green-soft) 0 6px, transparent 6px 12px);}
+  .stub .stub-main .coin{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;font-weight:700;}
+  .stub .stub-main .dates{font-size:.78rem;color:var(--text-muted);margin-top:.15rem;}
+  .stub .stub-status{text-align:right;}
+  .stub .stub-status .amt{font-family:'SF Mono','Menlo','Consolas',monospace;font-size:.85rem;color:var(--text-muted);display:block;margin-bottom:.25rem;}
+
+  .empty-state{
+    color:var(--text-muted);
+    font-size:.85rem;
+    padding:1.2rem;
+    text-align:center;
+    border:1px dashed var(--border);
+    border-radius:8px;
+  }
+
+  .row-actions button{padding:.3rem .55rem;font-size:.72rem;}
+
+  footer.actions-footer{
+    display:flex;
+    gap:.75rem;
+    flex-wrap:wrap;
+    margin-top:.5rem;
+  }
+
+  ::selection{background:var(--gold-soft);color:var(--text);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Ledger<span>.</span>Krypto</h1>
+    <p>Käufe, Verkäufe &amp; steuerfreie Haltefristen im Blick</p>
+  </div>
+  <div class="price-controls">
+    <span class="ts mono" id="lastUpdateLabel">Kurse noch nicht geladen</span>
+    <button class="primary" id="refreshPricesBtn">Kurse aktualisieren</button>
+  </div>
+</header>
+
+<main>
+
+  <div class="summary-strip" id="summaryStrip"></div>
+
+  <section>
+    <h2><span class="idx">01</span> Kauf erfassen</h2>
+    <div class="panel">
+      <form class="grid-form" id="purchaseForm">
+        <div class="field">
+          <label for="pCoin">Coin</label>
+          <select id="pCoin" required></select>
+        </div>
+        <div class="field" id="pCustomWrap" style="display:none;">
+          <label for="pCustomId">CoinGecko-ID</label>
+          <input type="text" id="pCustomId" placeholder="z.B. render-token">
+        </div>
+        <div class="field">
+          <label for="pDate">Kaufdatum</label>
+          <input type="date" id="pDate" required>
+        </div>
+        <div class="field">
+          <label for="pAmount">Menge</label>
+          <input type="number" id="pAmount" step="any" min="0" required>
+        </div>
+        <div class="field">
+          <label for="pPrice">Kaufpreis / Einheit (€)</label>
+          <input type="number" id="pPrice" step="any" min="0" placeholder="optional">
+        </div>
+        <div class="field">
+          <button type="submit" class="primary">Kauf hinzufügen</button>
+        </div>
+      </form>
+      <p class="hint">Kaufpreis ist optional – ohne Angabe wird kein Gewinn/Verlust berechnet, das steuerfreie Datum funktioniert trotzdem.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">02</span> Verkauf erfassen</h2>
+    <div class="panel">
+      <form class="grid-form" id="saleForm">
+        <div class="field">
+          <label for="sLot">Los (Coin · Kaufdatum · Restmenge)</label>
+          <select id="sLot" required></select>
+        </div>
+        <div class="field">
+          <label for="sDate">Verkaufsdatum</label>
+          <input type="date" id="sDate" required>
+        </div>
+        <div class="field">
+          <label for="sAmount">Menge</label>
+          <input type="number" id="sAmount" step="any" min="0" required>
+        </div>
+        <div class="field">
+          <label for="sPrice">Verkaufspreis / Einheit (€)</label>
+          <input type="number" id="sPrice" step="any" min="0" placeholder="optional">
+        </div>
+        <div class="field">
+          <button type="submit" class="primary">Verkauf buchen</button>
+        </div>
+      </form>
+      <p id="noLotsHint" class="hint" style="display:none;">Noch keine aktiven Lose vorhanden – zuerst einen Kauf erfassen.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">03</span> Portfolio · aktive Lose</h2>
+    <div class="panel table-wrap">
+      <table id="portfolioTable">
+        <thead>
+          <tr>
+            <th>Coin</th><th>Kaufdatum</th><th>Menge</th><th>Ø Kaufkurs</th>
+            <th>Akt. Kurs</th><th>Akt. Wert</th><th>G/V</th>
+            <th>Steuerfrei ab</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-state" id="portfolioEmpty" style="display:none;">Noch keine Käufe erfasst.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="two-col">
+      <div>
+        <h2><span class="idx">04</span> Übersicht je Coin</h2>
+        <div class="panel table-wrap">
+          <table id="coinSummaryTable">
+            <thead><tr><th>Coin</th><th>Menge</th><th>Wert</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty-state" id="coinSummaryEmpty" style="display:none;">Keine Daten.</div>
+        </div>
+      </div>
+      <div>
+        <h2><span class="idx">05</span> Steuerfrei-Timeline</h2>
+        <div class="panel">
+          <div class="stub-list" id="taxTimeline"></div>
+          <div class="empty-state" id="timelineEmpty" style="display:none;">Keine aktiven Lose.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">06</span> Verkaufshistorie</h2>
+    <div class="panel table-wrap">
+      <table id="salesTable">
+        <thead>
+          <tr><th>Verkaufsdatum</th><th>Coin</th><th>Menge</th><th>Verkaufspreis</th><th>Erlös</th><th>Kauflos vom</th><th>G/V</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty-state" id="salesEmpty" style="display:none;">Noch keine Verkäufe erfasst.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="idx">07</span> Backup</h2>
+    <div class="panel">
+      <p class="hint" style="margin-top:0;">Alle Daten liegen lokal im Browser (localStorage). Sichere regelmäßig ein Backup als Text.</p>
+
+      <div class="field" style="margin-bottom:.9rem;">
+        <label for="backupText">Backup-Text (exportieren: Button drücken · importieren: Text hier einfügen)</label>
+        <textarea id="backupText" rows="6" placeholder="Hier erscheint dein Backup nach Klick auf „Backup erzeugen“ – oder füge hier einen zuvor gesicherten Backup-Text ein, um ihn zu importieren."></textarea>
+      </div>
+
+      <footer class="actions-footer">
+        <button id="exportBtn">Backup erzeugen</button>
+        <button id="copyBtn">In Zwischenablage kopieren</button>
+        <button id="importBtn">Aus Text oben importieren</button>
+        <button class="danger-ghost" id="resetBtn">Alle Daten löschen</button>
+      </footer>
+      <p class="hint" id="backupStatus" style="min-height:1em;"></p>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Coin list (common coins, CoinGecko IDs) ----------
+  const COINS = [
+    {id:"bitcoin", symbol:"BTC", name:"Bitcoin"},
+    {id:"ethereum", symbol:"ETH", name:"Ethereum"},
+    {id:"tether", symbol:"USDT", name:"Tether"},
+    {id:"binancecoin", symbol:"BNB", name:"BNB"},
+    {id:"solana", symbol:"SOL", name:"Solana"},
+    {id:"ripple", symbol:"XRP", name:"XRP"},
+    {id:"usd-coin", symbol:"USDC", name:"USD Coin"},
+    {id:"cardano", symbol:"ADA", name:"Cardano"},
+    {id:"dogecoin", symbol:"DOGE", name:"Dogecoin"},
+    {id:"tron", symbol:"TRX", name:"TRON"},
+    {id:"avalanche-2", symbol:"AVAX", name:"Avalanche"},
+    {id:"polkadot", symbol:"DOT", name:"Polkadot"},
+    {id:"chainlink", symbol:"LINK", name:"Chainlink"},
+    {id:"polygon-ecosystem-token", symbol:"POL", name:"Polygon"},
+    {id:"litecoin", symbol:"LTC", name:"Litecoin"},
+    {id:"shiba-inu", symbol:"SHIB", name:"Shiba Inu"},
+    {id:"bitcoin-cash", symbol:"BCH", name:"Bitcoin Cash"},
+    {id:"uniswap", symbol:"UNI", name:"Uniswap"},
+    {id:"stellar", symbol:"XLM", name:"Stellar"},
+    {id:"near", symbol:"NEAR", name:"NEAR Protocol"},
+    {id:"internet-computer", symbol:"ICP", name:"Internet Computer"},
+    {id:"cosmos", symbol:"ATOM", name:"Cosmos"},
+    {id:"monero", symbol:"XMR", name:"Monero"},
+    {id:"aptos", symbol:"APT", name:"Aptos"},
+    {id:"filecoin", symbol:"FIL", name:"Filecoin"},
+    {id:"arbitrum", symbol:"ARB", name:"Arbitrum"},
+    {id:"optimism", symbol:"OP", name:"Optimism"},
+    {id:"vechain", symbol:"VET", name:"VeChain"},
+    {id:"render-token", symbol:"RNDR", name:"Render"},
+    {id:"the-graph", symbol:"GRT", name:"The Graph"},
+    {id:"__custom__", symbol:"", name:"Andere (CoinGecko-ID eingeben) …"}
+  ];
+
+  // ---------- State ----------
+  const store = {
+    load(key, fallback){
+      try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+      catch(e){ return fallback; }
+    },
+    save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  };
+
+  let purchases = store.load("ledger_purchases", []);
+  let sales = store.load("ledger_sales", []);
+  let prices = store.load("ledger_prices", {});       // { coinId: eurPrice }
+  let lastUpdate = store.load("ledger_lastUpdate", null);
+
+  function persist(){
+    store.save("ledger_purchases", purchases);
+    store.save("ledger_sales", sales);
+    store.save("ledger_prices", prices);
+    store.save("ledger_lastUpdate", lastUpdate);
+  }
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  function coinLabel(coinId){
+    const c = COINS.find(c => c.id === coinId);
+    return c ? `${c.symbol} · ${c.name}` : coinId;
+  }
+  function coinSymbol(coinId){
+    const c = COINS.find(c => c.id === coinId);
+    return c ? c.symbol : coinId.toUpperCase();
+  }
+
+  function fmtEUR(n){
+    if(n === null || n === undefined || isNaN(n)) return "–";
+    return n.toLocaleString("de-DE", {style:"currency", currency:"EUR", maximumFractionDigits: Math.abs(n) < 1 ? 6 : 2});
+  }
+  function fmtAmount(n){
+    if(n === null || n === undefined || isNaN(n)) return "–";
+    return n.toLocaleString("de-DE", {maximumFractionDigits:8});
+  }
+  function fmtDate(d){
+    return new Date(d).toLocaleDateString("de-DE", {year:"numeric", month:"2-digit", day:"2-digit"});
+  }
+  function taxFreeDate(purchaseDate){
+    const d = new Date(purchaseDate);
+    d.setFullYear(d.getFullYear() + 1);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+  function daysUntil(date){
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    const target = new Date(date);
+    target.setHours(0,0,0,0);
+    return Math.round((target - now) / 86400000);
+  }
+  function remainingAmount(purchase){
+    const sold = sales.filter(s => s.purchaseId === purchase.id)
+                       .reduce((sum, s) => sum + s.amount, 0);
+    return Math.max(0, purchase.amount - sold);
+  }
+  function activeLots(){
+    return purchases
+      .map(p => ({ ...p, remaining: remainingAmount(p) }))
+      .filter(p => p.remaining > 1e-12);
+  }
+
+  // ---------- Populate coin selects ----------
+  function populateCoinSelect(select){
+    select.innerHTML = "";
+    COINS.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.id === "__custom__" ? c.name : `${c.symbol} — ${c.name}`;
+      select.appendChild(opt);
+    });
+  }
+  const pCoinSelect = document.getElementById("pCoin");
+  populateCoinSelect(pCoinSelect);
+  pCoinSelect.addEventListener("change", () => {
+    document.getElementById("pCustomWrap").style.display =
+      pCoinSelect.value === "__custom__" ? "flex" : "none";
+  });
+
+  // ---------- Purchase form ----------
+  document.getElementById("purchaseForm").addEventListener("submit", e => {
+    e.preventDefault();
+    let coinId = pCoinSelect.value;
+    if(coinId === "__custom__"){
+      coinId = document.getElementById("pCustomId").value.trim().toLowerCase();
+      if(!coinId){ alert("Bitte eine CoinGecko-ID eingeben."); return; }
+    }
+    const date = document.getElementById("pDate").value;
+    const amount = parseFloat(document.getElementById("pAmount").value);
+    const priceRaw = document.getElementById("pPrice").value;
+    const price = priceRaw === "" ? null : parseFloat(priceRaw);
+    if(!date || !amount || amount <= 0){ alert("Bitte Datum und eine gültige Menge angeben."); return; }
+
+    purchases.push({ id: uid(), coinId, date, amount, price });
+    persist();
+    e.target.reset();
+    document.getElementById("pCustomWrap").style.display = "none";
+    renderAll();
+  });
+
+  // ---------- Sale form ----------
+  const sLotSelect = document.getElementById("sLot");
+  function populateLotSelect(){
+    const lots = activeLots().sort((a,b) => new Date(a.date) - new Date(b.date));
+    sLotSelect.innerHTML = "";
+    lots.forEach(l => {
+      const opt = document.createElement("option");
+      opt.value = l.id;
+      opt.textContent = `${coinSymbol(l.coinId)} · gekauft ${fmtDate(l.date)} · Rest ${fmtAmount(l.remaining)}`;
+      sLotSelect.appendChild(opt);
+    });
+    document.getElementById("saleForm").querySelector("button[type=submit]").disabled = lots.length === 0;
+    document.getElementById("noLotsHint").style.display = lots.length === 0 ? "block" : "none";
+  }
+
+  document.getElementById("saleForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const purchaseId = sLotSelect.value;
+    const lot = purchases.find(p => p.id === purchaseId);
+    if(!lot){ alert("Los nicht gefunden."); return; }
+    const rem = remainingAmount(lot);
+    const date = document.getElementById("sDate").value;
+    const amount = parseFloat(document.getElementById("sAmount").value);
+    const priceRaw = document.getElementById("sPrice").value;
+    const price = priceRaw === "" ? null : parseFloat(priceRaw);
+    if(!date || !amount || amount <= 0){ alert("Bitte Datum und eine gültige Menge angeben."); return; }
+    if(amount > rem + 1e-9){ alert(`Nur ${fmtAmount(rem)} ${coinSymbol(lot.coinId)} in diesem Los verfügbar.`); return; }
+
+    sales.push({ id: uid(), purchaseId, coinId: lot.coinId, date, amount, price });
+    persist();
+    e.target.reset();
+    renderAll();
+  });
+
+  // ---------- Price fetching ----------
+  document.getElementById("refreshPricesBtn").addEventListener("click", fetchPrices);
+
+  async function fetchPrices(){
+    const ids = [...new Set(purchases.map(p => p.coinId))];
+    if(ids.length === 0){ alert("Zuerst einen Kauf erfassen."); return; }
+    const btn = document.getElementById("refreshPricesBtn");
+    btn.disabled = true;
+    btn.textContent = "Lade Kurse …";
+    try{
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(","))}&vs_currencies=eur`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("API-Fehler " + res.status);
+      const data = await res.json();
+      ids.forEach(id => {
+        if(data[id] && typeof data[id].eur === "number"){
+          prices[id] = data[id].eur;
+        }
+      });
+      lastUpdate = new Date().toISOString();
+      persist();
+      renderAll();
+    }catch(err){
+      alert("Kurse konnten nicht geladen werden: " + err.message);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = "Kurse aktualisieren";
+    }
+  }
+
+  // ---------- Rendering ----------
+  function renderAll(){
+    populateLotSelect();
+    renderSummary();
+    renderPortfolioTable();
+    renderCoinSummary();
+    renderTimeline();
+    renderSalesTable();
+    renderLastUpdateLabel();
+  }
+
+  function renderLastUpdateLabel(){
+    const el = document.getElementById("lastUpdateLabel");
+    el.textContent = lastUpdate
+      ? "Kurse aktualisiert: " + new Date(lastUpdate).toLocaleString("de-DE")
+      : "Kurse noch nicht geladen";
+  }
+
+  function renderSummary(){
+    const lots = activeLots();
+    let totalValue = 0, totalInvested = 0, hasAllInvested = lots.length > 0;
+    lots.forEach(l => {
+      const price = prices[l.coinId];
+      if(typeof price === "number") totalValue += l.remaining * price;
+      if(typeof l.price === "number") totalInvested += l.remaining * l.price;
+      else hasAllInvested = false;
+    });
+    const gv = hasAllInvested ? totalValue - totalInvested : null;
+    const gvPct = (hasAllInvested && totalInvested > 0) ? (gv / totalInvested) * 100 : null;
+
+    const strip = document.getElementById("summaryStrip");
+    strip.innerHTML = `
+      <div class="summary-cell">
+        <div class="label">Gesamtwert Portfolio</div>
+        <div class="value total">${fmtEUR(totalValue)}</div>
+      </div>
+      <div class="summary-cell">
+        <div class="label">Aktive Lose</div>
+        <div class="value">${lots.length}</div>
+        <div class="sub" style="color:var(--text-muted)">${[...new Set(lots.map(l=>l.coinId))].length} Coins</div>
+      </div>
+      <div class="summary-cell">
+        <div class="label">Investiert (bekannt)</div>
+        <div class="value">${hasAllInvested ? fmtEUR(totalInvested) : fmtEUR(totalInvested) + " *"}</div>
+        ${hasAllInvested ? "" : `<div class="sub" style="color:var(--text-muted)">* nicht alle Kaufpreise bekannt</div>`}
+      </div>
+      <div class="summary-cell">
+        <div class="label">Gewinn / Verlust</div>
+        <div class="value ${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</div>
+        <div class="sub ${gvPct === null ? "" : (gvPct >= 0 ? "pos" : "neg")}">${gvPct === null ? "" : (gvPct >= 0 ? "+" : "") + gvPct.toFixed(1) + " %"}</div>
+      </div>
+    `;
+  }
+
+  function renderPortfolioTable(){
+    const lots = activeLots().sort((a,b) => new Date(a.date) - new Date(b.date));
+    const tbody = document.querySelector("#portfolioTable tbody");
+    tbody.innerHTML = "";
+    document.getElementById("portfolioEmpty").style.display = lots.length ? "none" : "block";
+
+    lots.forEach(l => {
+      const price = prices[l.coinId];
+      const value = typeof price === "number" ? l.remaining * price : null;
+      const invested = typeof l.price === "number" ? l.remaining * l.price : null;
+      const gv = (value !== null && invested !== null) ? value - invested : null;
+      const tfDate = taxFreeDate(l.date);
+      const days = daysUntil(tfDate);
+      const unlocked = days <= 0;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="coin-tag mono">${coinSymbol(l.coinId)}</span></td>
+        <td>${fmtDate(l.date)}</td>
+        <td>${fmtAmount(l.remaining)}${l.remaining < l.amount ? ` <span style="color:var(--text-muted)">(von ${fmtAmount(l.amount)})</span>` : ""}</td>
+        <td>${l.price !== null ? fmtEUR(l.price) : "–"}</td>
+        <td>${typeof price === "number" ? fmtEUR(price) : "–"}</td>
+        <td>${value !== null ? fmtEUR(value) : "–"}</td>
+        <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+        <td>${fmtDate(tfDate)}</td>
+        <td>${unlocked
+          ? `<span class="badge unlocked">🔓 steuerfrei</span>`
+          : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
+        <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll("[data-del-purchase]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-del-purchase");
+        if(!confirm("Diesen Kauf (und zugehörige Verkäufe) wirklich löschen?")) return;
+        purchases = purchases.filter(p => p.id !== id);
+        sales = sales.filter(s => s.purchaseId !== id);
+        persist();
+        renderAll();
+      });
+    });
+  }
+
+  function renderCoinSummary(){
+    const lots = activeLots();
+    const byCoin = {};
+    lots.forEach(l => {
+      if(!byCoin[l.coinId]) byCoin[l.coinId] = { amount: 0, value: 0, hasPrice: true };
+      byCoin[l.coinId].amount += l.remaining;
+      const price = prices[l.coinId];
+      if(typeof price === "number") byCoin[l.coinId].value += l.remaining * price;
+      else byCoin[l.coinId].hasPrice = false;
+    });
+    const tbody = document.querySelector("#coinSummaryTable tbody");
+    tbody.innerHTML = "";
+    const coinIds = Object.keys(byCoin);
+    document.getElementById("coinSummaryEmpty").style.display = coinIds.length ? "none" : "block";
+
+    coinIds.sort((a,b) => byCoin[b].value - byCoin[a].value).forEach(id => {
+      const row = byCoin[id];
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="coin-tag mono">${coinSymbol(id)}</span></td>
+        <td>${fmtAmount(row.amount)}</td>
+        <td>${row.hasPrice ? fmtEUR(row.value) : "–"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderTimeline(){
+    const lots = activeLots().sort((a,b) => taxFreeDate(a.date) - taxFreeDate(b.date));
+    const wrap = document.getElementById("taxTimeline");
+    wrap.innerHTML = "";
+    document.getElementById("timelineEmpty").style.display = lots.length ? "none" : "block";
+
+    lots.forEach(l => {
+      const tfDate = taxFreeDate(l.date);
+      const days = daysUntil(tfDate);
+      const unlocked = days <= 0;
+      const div = document.createElement("div");
+      div.className = "stub" + (unlocked ? " unlocked" : "");
+      div.innerHTML = `
+        <div class="stub-main">
+          <div class="coin">${coinSymbol(l.coinId)} · ${fmtAmount(l.remaining)}</div>
+          <div class="dates mono">gekauft ${fmtDate(l.date)} → frei ${fmtDate(tfDate)}</div>
+        </div>
+        <div class="stub-status">
+          ${unlocked
+            ? `<span class="badge unlocked">🔓 steuerfrei</span>`
+            : `<span class="badge locked">🔒 in ${days} Tag${days===1?"":"e"}n</span>`}
+        </div>
+      `;
+      wrap.appendChild(div);
+    });
+  }
+
+  function renderSalesTable(){
+    const rows = [...sales].sort((a,b) => new Date(b.date) - new Date(a.date));
+    const tbody = document.querySelector("#salesTable tbody");
+    tbody.innerHTML = "";
+    document.getElementById("salesEmpty").style.display = rows.length ? "none" : "block";
+
+    rows.forEach(s => {
+      const lot = purchases.find(p => p.id === s.purchaseId);
+      const proceeds = typeof s.price === "number" ? s.price * s.amount : null;
+      const cost = (lot && typeof lot.price === "number") ? lot.price * s.amount : null;
+      const gv = (proceeds !== null && cost !== null) ? proceeds - cost : null;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${fmtDate(s.date)}</td>
+        <td><span class="coin-tag mono">${coinSymbol(s.coinId)}</span></td>
+        <td>${fmtAmount(s.amount)}</td>
+        <td>${typeof s.price === "number" ? fmtEUR(s.price) : "–"}</td>
+        <td>${proceeds !== null ? fmtEUR(proceeds) : "–"}</td>
+        <td>${lot ? fmtDate(lot.date) : "gelöscht"}</td>
+        <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+        <td class="row-actions"><button class="danger-ghost" data-del-sale="${s.id}">Löschen</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll("[data-del-sale]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-del-sale");
+        if(!confirm("Diesen Verkauf wirklich löschen?")) return;
+        sales = sales.filter(s => s.id !== id);
+        persist();
+        renderAll();
+      });
+    });
+  }
+
+  // ---------- Export / Import / Reset ----------
+  // Hinweis: bewusst OHNE Blob-Download und OHNE <input type=file> Dialog,
+  // da manche Sandbox-Browser (z.B. Documents-App) das als "externen
+  // Ressourcenzugriff" blockieren. Stattdessen: reiner Text in einem
+  // Textfeld, Kopieren über die Zwischenablage-API.
+  const backupTextArea = document.getElementById("backupText");
+  const backupStatus = document.getElementById("backupStatus");
+
+  function setStatus(msg, isError){
+    backupStatus.textContent = msg;
+    backupStatus.style.color = isError ? "var(--red)" : "var(--green)";
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const payload = { purchases, sales, prices, lastUpdate, exportedAt: new Date().toISOString() };
+    backupTextArea.value = JSON.stringify(payload, null, 2);
+    backupTextArea.focus();
+    backupTextArea.select();
+    setStatus("Backup erzeugt – jetzt kopieren und z.B. in Notizen einfügen.", false);
+  });
+
+  document.getElementById("copyBtn").addEventListener("click", async () => {
+    if(!backupTextArea.value.trim()){
+      setStatus("Zuerst „Backup erzeugen“ drücken.", true);
+      return;
+    }
+    try{
+      await navigator.clipboard.writeText(backupTextArea.value);
+      setStatus("In Zwischenablage kopiert.", false);
+    }catch(err){
+      // Fallback ohne Clipboard-API: Text ist bereits markiert (select()),
+      // manuelles Kopieren per Tastatur/Kontextmenü funktioniert weiterhin.
+      backupTextArea.focus();
+      backupTextArea.select();
+      setStatus("Automatisches Kopieren nicht möglich – Text ist markiert, bitte manuell kopieren.", true);
+    }
+  });
+
+  document.getElementById("importBtn").addEventListener("click", () => {
+    const raw = backupTextArea.value.trim();
+    if(!raw){ setStatus("Bitte zuerst Backup-Text in das Feld einfügen.", true); return; }
+    try{
+      const data = JSON.parse(raw);
+      if(!Array.isArray(data.purchases) || !Array.isArray(data.sales)){
+        throw new Error("Ungültiges Format");
+      }
+      if(!confirm("Import ersetzt alle aktuellen Daten. Fortfahren?")) return;
+      purchases = data.purchases;
+      sales = data.sales;
+      prices = data.prices || {};
+      lastUpdate = data.lastUpdate || null;
+      persist();
+      renderAll();
+      setStatus("Import erfolgreich.", false);
+    }catch(err){
+      setStatus("Import fehlgeschlagen: " + err.message, true);
+    }
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if(!confirm("Wirklich ALLE Käufe und Verkäufe unwiderruflich löschen?")) return;
+    purchases = []; sales = []; prices = {}; lastUpdate = null;
+    persist();
+    renderAll();
+  });
+
+  // ---------- Init ----------
+  document.getElementById("pDate").valueAsDate = new Date();
+  document.getElementById("sDate").valueAsDate = new Date();
+  renderAll();
+})();
+</script>
+</body>
+</html>
