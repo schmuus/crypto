@@ -309,8 +309,8 @@
     <div class="panel">
       <form class="grid-form" id="saleForm">
         <div class="field">
-          <label for="sLot">Los (Coin · Kaufdatum · Restmenge)</label>
-          <select id="sLot" required></select>
+          <label for="sCoin">Coin</label>
+          <select id="sCoin" required></select>
         </div>
         <div class="field">
           <label for="sDate">Verkaufsdatum</label>
@@ -328,6 +328,7 @@
           <button type="submit" class="primary">Verkauf buchen</button>
         </div>
       </form>
+      <p class="hint">Die Menge wird automatisch von deinen ältesten Käufen dieses Coins abgezogen (FIFO) – bei Bedarf über mehrere Kauf-Lose verteilt.</p>
       <p id="noLotsHint" class="hint" style="display:none;">Noch keine aktiven Lose vorhanden – zuerst einen Kauf erfassen.</p>
     </div>
   </section>
@@ -335,6 +336,10 @@
   <section>
     <h2><span class="idx">03</span> Portfolio · aktive Lose</h2>
     <div class="panel table-wrap">
+      <div class="field" style="max-width:260px;margin-bottom:1.1rem;">
+        <label for="portfolioFilter">Filter</label>
+        <select id="portfolioFilter"></select>
+      </div>
       <table id="portfolioTable">
         <thead>
           <tr>
@@ -355,7 +360,7 @@
         <h2><span class="idx">04</span> Übersicht je Coin</h2>
         <div class="panel table-wrap">
           <table id="coinSummaryTable">
-            <thead><tr><th>Coin</th><th>Menge</th><th>Wert</th></tr></thead>
+            <thead><tr><th>Coin</th><th>Bestand</th><th>Ø Kauf</th><th>Investiert</th><th>Wert</th><th>G/V</th><th>Frei</th><th>Gesperrt</th></tr></thead>
             <tbody></tbody>
           </table>
           <div class="empty-state" id="coinSummaryEmpty" style="display:none;">Keine Daten.</div>
@@ -502,9 +507,19 @@
     return Math.round((target - now) / 86400000);
   }
   function remainingAmount(purchase){
-    const sold = sales.filter(s => s.purchaseId === purchase.id)
-                       .reduce((sum, s) => sum + s.amount, 0);
+    let sold = 0;
+    sales.forEach(s => {
+      saleAllocations(s).forEach(a => { if(a.purchaseId === purchase.id) sold += a.amount; });
+    });
     return Math.max(0, purchase.amount - sold);
+  }
+  // Verkäufe können (neues Modell) mehrere Kauf-Lose per FIFO betreffen.
+  // Ältere Verkäufe (vor diesem Update) hatten nur ein einzelnes purchaseId-Feld -
+  // die werden hier automatisch in das gleiche Format übersetzt.
+  function saleAllocations(sale){
+    if(Array.isArray(sale.allocations)) return sale.allocations;
+    if(sale.purchaseId) return [{ purchaseId: sale.purchaseId, amount: sale.amount }];
+    return [];
   }
   function activeLots(){
     return purchases
@@ -551,34 +566,55 @@
   });
 
   // ---------- Sale form ----------
-  const sLotSelect = document.getElementById("sLot");
-  function populateLotSelect(){
-    const lots = activeLots().sort((a,b) => new Date(a.date) - new Date(b.date));
-    sLotSelect.innerHTML = "";
-    lots.forEach(l => {
+  const sCoinSelect = document.getElementById("sCoin");
+  function populateSaleCoinSelect(){
+    const coinIds = [...new Set(activeLots().map(l => l.coinId))]
+      .sort((a,b) => coinSymbol(a).localeCompare(coinSymbol(b)));
+    const current = sCoinSelect.value;
+    sCoinSelect.innerHTML = "";
+    coinIds.forEach(id => {
       const opt = document.createElement("option");
-      opt.value = l.id;
-      opt.textContent = `${coinSymbol(l.coinId)} · gekauft ${fmtDate(l.date)} · Rest ${fmtAmount(l.remaining)}`;
-      sLotSelect.appendChild(opt);
+      opt.value = id;
+      opt.textContent = coinLabel(id);
+      sCoinSelect.appendChild(opt);
     });
-    document.getElementById("saleForm").querySelector("button[type=submit]").disabled = lots.length === 0;
-    document.getElementById("noLotsHint").style.display = lots.length === 0 ? "block" : "none";
+    if(coinIds.includes(current)) sCoinSelect.value = current;
+
+    const disabled = coinIds.length === 0;
+    document.getElementById("saleForm").querySelector("button[type=submit]").disabled = disabled;
+    document.getElementById("noLotsHint").style.display = disabled ? "block" : "none";
   }
 
   document.getElementById("saleForm").addEventListener("submit", e => {
     e.preventDefault();
-    const purchaseId = sLotSelect.value;
-    const lot = purchases.find(p => p.id === purchaseId);
-    if(!lot){ alert("Los nicht gefunden."); return; }
-    const rem = remainingAmount(lot);
+    const coinId = sCoinSelect.value;
+    if(!coinId){ alert("Kein Coin mit aktivem Bestand vorhanden."); return; }
     const date = document.getElementById("sDate").value;
     const amount = parseFloat(document.getElementById("sAmount").value);
     const priceRaw = document.getElementById("sPrice").value;
     const price = priceRaw === "" ? null : parseFloat(priceRaw);
     if(!date || !amount || amount <= 0){ alert("Bitte Datum und eine gültige Menge angeben."); return; }
-    if(amount > rem + 1e-9){ alert(`Nur ${fmtAmount(rem)} ${coinSymbol(lot.coinId)} in diesem Los verfügbar.`); return; }
 
-    sales.push({ id: uid(), purchaseId, coinId: lot.coinId, date, amount, price });
+    // FIFO: älteste aktive Lose dieses Coins zuerst abziehen, ggf. über mehrere verteilt
+    const lots = activeLots()
+      .filter(l => l.coinId === coinId)
+      .sort((a,b) => new Date(a.date) - new Date(b.date));
+    const totalAvail = lots.reduce((sum, l) => sum + l.remaining, 0);
+    if(amount > totalAvail + 1e-9){
+      alert(`Nur ${fmtAmount(totalAvail)} ${coinSymbol(coinId)} insgesamt verfügbar.`);
+      return;
+    }
+
+    let remainingToSell = amount;
+    const allocations = [];
+    for(const l of lots){
+      if(remainingToSell <= 1e-12) break;
+      const take = Math.min(l.remaining, remainingToSell);
+      allocations.push({ purchaseId: l.id, amount: take });
+      remainingToSell -= take;
+    }
+
+    sales.push({ id: uid(), coinId, date, amount, price, allocations });
     persist();
     e.target.reset();
     renderAll();
@@ -616,7 +652,7 @@
 
   // ---------- Rendering ----------
   function renderAll(){
-    populateLotSelect();
+    populateSaleCoinSelect();
     renderSummary();
     renderPortfolioTable();
     renderCoinSummary();
@@ -668,37 +704,76 @@
     `;
   }
 
+  function populatePortfolioFilter(){
+    const sel = document.getElementById("portfolioFilter");
+    const coinIds = [...new Set(purchases.map(p => p.coinId))]
+      .sort((a,b) => coinSymbol(a).localeCompare(coinSymbol(b)));
+    const current = sel.value;
+    sel.innerHTML = `<option value="">Alle Coins</option>` +
+      coinIds.map(id => `<option value="${id}">${coinLabel(id)}</option>`).join("");
+    sel.value = coinIds.includes(current) ? current : "";
+  }
+
   function renderPortfolioTable(){
-    const lots = activeLots().sort((a,b) => new Date(a.date) - new Date(b.date));
+    populatePortfolioFilter();
+    const filterVal = document.getElementById("portfolioFilter").value;
+
+    let lots = activeLots();
+    if(filterVal) lots = lots.filter(l => l.coinId === filterVal);
+
     const tbody = document.querySelector("#portfolioTable tbody");
     tbody.innerHTML = "";
     document.getElementById("portfolioEmpty").style.display = lots.length ? "none" : "block";
 
-    lots.forEach(l => {
-      const price = prices[l.coinId];
-      const value = typeof price === "number" ? l.remaining * price : null;
-      const invested = typeof l.price === "number" ? l.remaining * l.price : null;
-      const gv = (value !== null && invested !== null) ? value - invested : null;
-      const tfDate = taxFreeDate(l.date);
-      const days = daysUntil(tfDate);
-      const unlocked = days <= 0;
+    // Gruppierung nach Coin, damit nicht alles durcheinander in einer Liste steht
+    const groups = {};
+    lots.forEach(l => { (groups[l.coinId] = groups[l.coinId] || []).push(l); });
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><span class="coin-tag mono">${coinSymbol(l.coinId)}</span></td>
-        <td>${fmtDate(l.date)}</td>
-        <td>${fmtAmount(l.remaining)}${l.remaining < l.amount ? ` <span style="color:var(--text-muted)">(von ${fmtAmount(l.amount)})</span>` : ""}</td>
-        <td>${l.price !== null ? fmtEUR(l.price) : "–"}</td>
-        <td>${typeof price === "number" ? fmtEUR(price) : "–"}</td>
-        <td>${value !== null ? fmtEUR(value) : "–"}</td>
-        <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
-        <td>${fmtDate(tfDate)}</td>
-        <td>${unlocked
-          ? `<span class="badge unlocked">🔓 steuerfrei</span>`
-          : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
-        <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
-      `;
-      tbody.appendChild(tr);
+    const coinIds = Object.keys(groups).sort((a,b) => {
+      const priceA = prices[a], priceB = prices[b];
+      const valA = groups[a].reduce((s,l) => s + (typeof priceA === "number" ? l.remaining * priceA : 0), 0);
+      const valB = groups[b].reduce((s,l) => s + (typeof priceB === "number" ? l.remaining * priceB : 0), 0);
+      return valB - valA;
+    });
+
+    coinIds.forEach(coinId => {
+      const group = groups[coinId].sort((a,b) => new Date(a.date) - new Date(b.date));
+      const totalAmount = group.reduce((s,l) => s + l.remaining, 0);
+      const price = prices[coinId];
+      const totalValue = typeof price === "number" ? totalAmount * price : null;
+
+      const headerTr = document.createElement("tr");
+      headerTr.innerHTML = `<td colspan="10" style="background:var(--surface-2);font-weight:700;color:var(--gold);font-family:-apple-system,sans-serif;letter-spacing:.02em;">
+        ${coinSymbol(coinId)} — ${group.length} Los${group.length === 1 ? "" : "e"} · gesamt ${fmtAmount(totalAmount)} · ${totalValue !== null ? fmtEUR(totalValue) : "–"}
+      </td>`;
+      tbody.appendChild(headerTr);
+
+      group.forEach(l => {
+        const lotPrice = prices[l.coinId];
+        const value = typeof lotPrice === "number" ? l.remaining * lotPrice : null;
+        const invested = typeof l.price === "number" ? l.remaining * l.price : null;
+        const gv = (value !== null && invested !== null) ? value - invested : null;
+        const tfDate = taxFreeDate(l.date);
+        const days = daysUntil(tfDate);
+        const unlocked = days <= 0;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="coin-tag mono">${coinSymbol(l.coinId)}</span></td>
+          <td>${fmtDate(l.date)}</td>
+          <td>${fmtAmount(l.remaining)}${l.remaining < l.amount ? ` <span style="color:var(--text-muted)">(von ${fmtAmount(l.amount)})</span>` : ""}</td>
+          <td>${l.price !== null ? fmtEUR(l.price) : "–"}</td>
+          <td>${typeof lotPrice === "number" ? fmtEUR(lotPrice) : "–"}</td>
+          <td>${value !== null ? fmtEUR(value) : "–"}</td>
+          <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+          <td>${fmtDate(tfDate)}</td>
+          <td>${unlocked
+            ? `<span class="badge unlocked">🔓 steuerfrei</span>`
+            : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
+          <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
     });
 
     tbody.querySelectorAll("[data-del-purchase]").forEach(btn => {
@@ -706,7 +781,7 @@
         const id = btn.getAttribute("data-del-purchase");
         if(!confirm("Diesen Kauf (und zugehörige Verkäufe) wirklich löschen?")) return;
         purchases = purchases.filter(p => p.id !== id);
-        sales = sales.filter(s => s.purchaseId !== id);
+        sales = sales.filter(s => !saleAllocations(s).some(a => a.purchaseId === id));
         persist();
         renderAll();
       });
@@ -717,24 +792,52 @@
     const lots = activeLots();
     const byCoin = {};
     lots.forEach(l => {
-      if(!byCoin[l.coinId]) byCoin[l.coinId] = { amount: 0, value: 0, hasPrice: true };
-      byCoin[l.coinId].amount += l.remaining;
+      if(!byCoin[l.coinId]){
+        byCoin[l.coinId] = {
+          amount: 0, value: 0, hasPrice: true,
+          investedAmount: 0, investedQty: 0, hasAllPrices: true,
+          unlockedAmount: 0, lockedAmount: 0
+        };
+      }
+      const g = byCoin[l.coinId];
+      g.amount += l.remaining;
+
       const price = prices[l.coinId];
-      if(typeof price === "number") byCoin[l.coinId].value += l.remaining * price;
-      else byCoin[l.coinId].hasPrice = false;
+      if(typeof price === "number") g.value += l.remaining * price;
+      else g.hasPrice = false;
+
+      if(typeof l.price === "number"){
+        g.investedAmount += l.remaining * l.price;
+        g.investedQty += l.remaining;
+      } else {
+        g.hasAllPrices = false;
+      }
+
+      const days = daysUntil(taxFreeDate(l.date));
+      if(days <= 0) g.unlockedAmount += l.remaining;
+      else g.lockedAmount += l.remaining;
     });
+
     const tbody = document.querySelector("#coinSummaryTable tbody");
     tbody.innerHTML = "";
     const coinIds = Object.keys(byCoin);
     document.getElementById("coinSummaryEmpty").style.display = coinIds.length ? "none" : "block";
 
     coinIds.sort((a,b) => byCoin[b].value - byCoin[a].value).forEach(id => {
-      const row = byCoin[id];
+      const g = byCoin[id];
+      const avgPrice = g.investedQty > 0 ? g.investedAmount / g.investedQty : null;
+      const gv = (g.hasPrice && g.hasAllPrices) ? g.value - g.investedAmount : null;
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td><span class="coin-tag mono">${coinSymbol(id)}</span></td>
-        <td>${fmtAmount(row.amount)}</td>
-        <td>${row.hasPrice ? fmtEUR(row.value) : "–"}</td>
+        <td>${fmtAmount(g.amount)}</td>
+        <td>${avgPrice !== null ? fmtEUR(avgPrice) : "–"}</td>
+        <td>${g.investedQty > 0 ? fmtEUR(g.investedAmount) + (g.hasAllPrices ? "" : " *") : "–"}</td>
+        <td>${g.hasPrice ? fmtEUR(g.value) : "–"}</td>
+        <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+        <td class="pos">${fmtAmount(g.unlockedAmount)}</td>
+        <td class="${g.lockedAmount > 1e-12 ? "neg" : ""}">${g.lockedAmount > 1e-12 ? fmtAmount(g.lockedAmount) : "–"}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -774,10 +877,24 @@
     document.getElementById("salesEmpty").style.display = rows.length ? "none" : "block";
 
     rows.forEach(s => {
-      const lot = purchases.find(p => p.id === s.purchaseId);
+      const allocs = saleAllocations(s);
+      const lotDates = allocs
+        .map(a => { const p = purchases.find(pp => pp.id === a.purchaseId); return p ? fmtDate(p.date) : null; })
+        .filter(Boolean);
+      let lotLabel;
+      if(lotDates.length === 0) lotLabel = "gelöscht";
+      else if(lotDates.length === 1) lotLabel = lotDates[0];
+      else lotLabel = `${allocs.length} Lose (${lotDates[0]} u.a.)`;
+
+      let cost = 0, costKnown = allocs.length > 0;
+      allocs.forEach(a => {
+        const p = purchases.find(pp => pp.id === a.purchaseId);
+        if(p && typeof p.price === "number") cost += a.amount * p.price;
+        else costKnown = false;
+      });
       const proceeds = typeof s.price === "number" ? s.price * s.amount : null;
-      const cost = (lot && typeof lot.price === "number") ? lot.price * s.amount : null;
-      const gv = (proceeds !== null && cost !== null) ? proceeds - cost : null;
+      const gv = (proceeds !== null && costKnown) ? proceeds - cost : null;
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${fmtDate(s.date)}</td>
@@ -785,7 +902,7 @@
         <td>${fmtAmount(s.amount)}</td>
         <td>${typeof s.price === "number" ? fmtEUR(s.price) : "–"}</td>
         <td>${proceeds !== null ? fmtEUR(proceeds) : "–"}</td>
-        <td>${lot ? fmtDate(lot.date) : "gelöscht"}</td>
+        <td>${lotLabel}</td>
         <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
         <td class="row-actions"><button class="danger-ghost" data-del-sale="${s.id}">Löschen</button></td>
       `;
@@ -870,6 +987,7 @@
   });
 
   // ---------- Init ----------
+  document.getElementById("portfolioFilter").addEventListener("change", renderPortfolioTable);
   document.getElementById("pDate").valueAsDate = new Date();
   document.getElementById("sDate").valueAsDate = new Date();
   renderAll();
