@@ -2,6 +2,9 @@ name = "crypto"
 compatibility_date = "2026-08-01"
 main = "worker.js"
 
+[vars]
+BASIC_AUTH_USER = "marcokkirchi@web.de"
+
 [assets]
 directory = "."
 binding = "ASSETS"
