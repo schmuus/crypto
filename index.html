@@ -383,7 +383,8 @@
           <input type="number" id="pPrice" step="any" min="0" placeholder="optional">
         </div>
         <div class="field">
-          <button type="submit" class="primary">Kauf hinzufügen</button>
+          <button type="submit" class="primary" id="pSubmitBtn">Kauf hinzufügen</button>
+          <button type="button" id="pCancelEdit" class="ghost" style="display:none;margin-top:.5rem;">Bearbeiten abbrechen</button>
         </div>
       </form>
       <p class="hint">Kaufpreis ist optional – ohne Angabe wird kein Gewinn/Verlust berechnet, das steuerfreie Datum funktioniert trotzdem.</p>
@@ -411,7 +412,8 @@
           <input type="number" id="sPrice" step="any" min="0" placeholder="optional">
         </div>
         <div class="field">
-          <button type="submit" class="primary">Verkauf buchen</button>
+          <button type="submit" class="primary" id="sSubmitBtn">Verkauf buchen</button>
+          <button type="button" id="sCancelEdit" class="ghost" style="display:none;margin-top:.5rem;">Bearbeiten abbrechen</button>
         </div>
       </form>
       <p class="hint">Die Menge wird automatisch von deinen ältesten Käufen dieses Coins abgezogen (FIFO) – bei Bedarf über mehrere Kauf-Lose verteilt.</p>
@@ -648,6 +650,41 @@
   });
 
   // ---------- Purchase form ----------
+  let editingPurchaseId = null;
+
+  function startEditPurchase(id){
+    const p = purchases.find(pp => pp.id === id);
+    if(!p) return;
+    editingPurchaseId = id;
+
+    const hasOption = [...pCoinSelect.options].some(o => o.value === p.coinId);
+    if(hasOption){
+      pCoinSelect.value = p.coinId;
+      document.getElementById("pCustomWrap").style.display = "none";
+    } else {
+      pCoinSelect.value = "__custom__";
+      document.getElementById("pCustomWrap").style.display = "flex";
+      document.getElementById("pCustomId").value = p.coinId;
+    }
+    document.getElementById("pDate").value = p.date;
+    document.getElementById("pAmount").value = p.amount;
+    document.getElementById("pPrice").value = p.price !== null && p.price !== undefined ? p.price : "";
+
+    document.getElementById("pSubmitBtn").textContent = "Änderungen speichern";
+    document.getElementById("pCancelEdit").style.display = "inline-block";
+    document.getElementById("purchaseForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelEditPurchase(){
+    editingPurchaseId = null;
+    document.getElementById("purchaseForm").reset();
+    document.getElementById("pCustomWrap").style.display = "none";
+    document.getElementById("pSubmitBtn").textContent = "Kauf hinzufügen";
+    document.getElementById("pCancelEdit").style.display = "none";
+    document.getElementById("pDate").valueAsDate = new Date();
+  }
+  document.getElementById("pCancelEdit").addEventListener("click", cancelEditPurchase);
+
   document.getElementById("purchaseForm").addEventListener("submit", e => {
     e.preventDefault();
     let coinId = pCoinSelect.value;
@@ -661,10 +698,19 @@
     const price = priceRaw === "" ? null : parseFloat(priceRaw);
     if(!date || !amount || amount <= 0){ alert("Bitte Datum und eine gültige Menge angeben."); return; }
 
-    purchases.push({ id: uid(), coinId, date, amount, price });
+    if(editingPurchaseId){
+      const p = purchases.find(pp => pp.id === editingPurchaseId);
+      if(p){ p.coinId = coinId; p.date = date; p.amount = amount; p.price = price; }
+      editingPurchaseId = null;
+      document.getElementById("pSubmitBtn").textContent = "Kauf hinzufügen";
+      document.getElementById("pCancelEdit").style.display = "none";
+    } else {
+      purchases.push({ id: uid(), coinId, date, amount, price });
+    }
     persist();
     e.target.reset();
     document.getElementById("pCustomWrap").style.display = "none";
+    document.getElementById("pDate").valueAsDate = new Date();
     renderAll();
   });
 
@@ -688,6 +734,55 @@
     document.getElementById("noLotsHint").style.display = disabled ? "block" : "none";
   }
 
+  let editingSaleId = null;
+
+  function populateSaleCoinSelect(){
+    const coinIds = [...new Set(activeLots().map(l => l.coinId))];
+    if(editingSaleId){
+      const s = sales.find(ss => ss.id === editingSaleId);
+      if(s && !coinIds.includes(s.coinId)) coinIds.push(s.coinId);
+    }
+    coinIds.sort((a,b) => coinSymbol(a).localeCompare(coinSymbol(b)));
+    const current = sCoinSelect.value;
+    sCoinSelect.innerHTML = "";
+    coinIds.forEach(id => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = coinLabel(id);
+      sCoinSelect.appendChild(opt);
+    });
+    if(coinIds.includes(current)) sCoinSelect.value = current;
+
+    const disabled = coinIds.length === 0;
+    document.getElementById("saleForm").querySelector("button[type=submit]").disabled = disabled;
+    document.getElementById("noLotsHint").style.display = (disabled && !editingSaleId) ? "block" : "none";
+  }
+
+  function startEditSale(id){
+    const s = sales.find(ss => ss.id === id);
+    if(!s) return;
+    editingSaleId = id;
+    populateSaleCoinSelect();
+    sCoinSelect.value = s.coinId;
+    document.getElementById("sDate").value = s.date;
+    document.getElementById("sAmount").value = s.amount;
+    document.getElementById("sPrice").value = s.price !== null && s.price !== undefined ? s.price : "";
+
+    document.getElementById("sSubmitBtn").textContent = "Änderungen speichern";
+    document.getElementById("sCancelEdit").style.display = "inline-block";
+    document.getElementById("saleForm").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelEditSale(){
+    editingSaleId = null;
+    document.getElementById("saleForm").reset();
+    document.getElementById("sSubmitBtn").textContent = "Verkauf buchen";
+    document.getElementById("sCancelEdit").style.display = "none";
+    document.getElementById("sDate").valueAsDate = new Date();
+    populateSaleCoinSelect();
+  }
+  document.getElementById("sCancelEdit").addEventListener("click", cancelEditSale);
+
   document.getElementById("saleForm").addEventListener("submit", e => {
     e.preventDefault();
     const coinId = sCoinSelect.value;
@@ -698,6 +793,15 @@
     const price = priceRaw === "" ? null : parseFloat(priceRaw);
     if(!date || !amount || amount <= 0){ alert("Bitte Datum und eine gültige Menge angeben."); return; }
 
+    const wasEditingId = editingSaleId;
+    let backupSale = null;
+    if(wasEditingId){
+      // Alten Verkauf zunächst entfernen, damit seine Lose wieder als "aktiv" zählen
+      // und die FIFO-Zuordnung für die neuen Werte frisch berechnet wird.
+      backupSale = sales.find(s => s.id === wasEditingId) || null;
+      sales = sales.filter(s => s.id !== wasEditingId);
+    }
+
     // FIFO: älteste aktive Lose dieses Coins zuerst abziehen, ggf. über mehrere verteilt
     const lots = activeLots()
       .filter(l => l.coinId === coinId)
@@ -705,6 +809,7 @@
     const totalAvail = lots.reduce((sum, l) => sum + l.remaining, 0);
     if(amount > totalAvail + 1e-9){
       alert(`Nur ${fmtAmount(totalAvail)} ${coinSymbol(coinId)} insgesamt verfügbar.`);
+      if(backupSale) sales.push(backupSale); // Änderung abgebrochen -> alten Verkauf wiederherstellen
       return;
     }
 
@@ -717,9 +822,13 @@
       remainingToSell -= take;
     }
 
-    sales.push({ id: uid(), coinId, date, amount, price, allocations });
+    sales.push({ id: wasEditingId || uid(), coinId, date, amount, price, allocations });
+    editingSaleId = null;
+    document.getElementById("sSubmitBtn").textContent = "Verkauf buchen";
+    document.getElementById("sCancelEdit").style.display = "none";
     persist();
     e.target.reset();
+    document.getElementById("sDate").valueAsDate = new Date();
     renderAll();
   });
 
@@ -870,7 +979,7 @@
             <td>${unlocked
               ? `<span class="badge unlocked">🔓 steuerfrei</span>`
               : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
-            <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
+            <td class="row-actions"><button class="ghost" data-edit-purchase="${l.id}">Bearbeiten</button> <button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
           </tr>
         `;
       }).join("");
@@ -913,6 +1022,11 @@
         sales = sales.filter(s => !saleAllocations(s).some(a => a.purchaseId === id));
         persist();
         renderAll();
+      });
+    });
+    container.querySelectorAll("[data-edit-purchase]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        startEditPurchase(btn.getAttribute("data-edit-purchase"));
       });
     });
   }
@@ -1115,7 +1229,7 @@
         <td>${proceeds !== null ? fmtEUR(proceeds) : "–"}</td>
         <td>${lotLabel}</td>
         <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
-        <td class="row-actions"><button class="danger-ghost" data-del-sale="${s.id}">Löschen</button></td>
+        <td class="row-actions"><button class="ghost" data-edit-sale="${s.id}">Bearbeiten</button> <button class="danger-ghost" data-del-sale="${s.id}">Löschen</button></td>
       `;
       tbody.appendChild(tr);
     });
@@ -1127,6 +1241,11 @@
         sales = sales.filter(s => s.id !== id);
         persist();
         renderAll();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-sale]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        startEditSale(btn.getAttribute("data-edit-sale"));
       });
     });
   }
