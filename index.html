@@ -249,6 +249,40 @@
     border-radius:8px;
   }
 
+  details.group{
+    border:1px solid var(--border);
+    border-radius:8px;
+    margin-bottom:.7rem;
+    overflow:hidden;
+    background:var(--surface-2);
+  }
+  details.group:last-of-type{margin-bottom:0;}
+  details.group summary{
+    cursor:pointer;
+    list-style:none;
+    padding:.75rem 1rem;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.6rem;
+    font-family:-apple-system,sans-serif;
+    font-weight:700;
+    color:var(--gold);
+    letter-spacing:.02em;
+    font-size:.88rem;
+  }
+  details.group summary::-webkit-details-marker{display:none;}
+  details.group summary .chev{
+    color:var(--text-muted);
+    font-size:.75rem;
+    transition:transform .15s;
+    flex-shrink:0;
+  }
+  details.group[open] summary .chev{transform:rotate(90deg);}
+  details.group summary .g-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  details.group .group-body{padding:.2rem .9rem .8rem;}
+  details.group .group-body .table-wrap{margin:0;}
+
   .pie-wrap{
     display:flex;
     gap:1.6rem;
@@ -392,18 +426,7 @@
         <label for="portfolioFilter">Filter</label>
         <select id="portfolioFilter"></select>
       </div>
-      <div class="table-wrap">
-        <table id="portfolioTable">
-          <thead>
-            <tr>
-              <th>Coin</th><th>Kaufdatum</th><th>Menge</th><th>Ø Kaufkurs</th>
-              <th>Akt. Kurs</th><th>Akt. Wert</th><th>G/V</th>
-              <th>Steuerfrei ab</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div id="portfolioGroups"></div>
       <div class="empty-state" id="portfolioEmpty" style="display:none;">Noch keine Käufe erfasst.</div>
     </div>
   </section>
@@ -430,7 +453,7 @@
       <div>
         <h2><span class="idx">05</span> Steuerfrei-Timeline</h2>
         <div class="panel">
-          <div class="stub-list" id="taxTimeline"></div>
+          <div id="taxTimelineGroups"></div>
           <div class="empty-state" id="timelineEmpty" style="display:none;">Keine aktiven Lose.</div>
         </div>
       </div>
@@ -797,6 +820,8 @@
     sel.value = coinIds.includes(current) ? current : "";
   }
 
+  const openPortfolioGroups = new Set();
+
   function renderPortfolioTable(){
     populatePortfolioFilter();
     const filterVal = document.getElementById("portfolioFilter").value;
@@ -804,8 +829,8 @@
     let lots = activeLots();
     if(filterVal) lots = lots.filter(l => l.coinId === filterVal);
 
-    const tbody = document.querySelector("#portfolioTable tbody");
-    tbody.innerHTML = "";
+    const container = document.getElementById("portfolioGroups");
+    container.innerHTML = "";
     document.getElementById("portfolioEmpty").style.display = lots.length ? "none" : "block";
 
     // Gruppierung nach Coin, damit nicht alles durcheinander in einer Liste steht
@@ -825,13 +850,7 @@
       const price = prices[coinId];
       const totalValue = typeof price === "number" ? totalAmount * price : null;
 
-      const headerTr = document.createElement("tr");
-      headerTr.innerHTML = `<td colspan="10" style="background:var(--surface-2);font-weight:700;color:var(--gold);font-family:-apple-system,sans-serif;letter-spacing:.02em;">
-        ${coinSymbol(coinId)} — ${group.length} Los${group.length === 1 ? "" : "e"} · gesamt ${fmtAmount(totalAmount)} · ${totalValue !== null ? fmtEUR(totalValue) : "–"}
-      </td>`;
-      tbody.appendChild(headerTr);
-
-      group.forEach(l => {
+      const rows = group.map(l => {
         const lotPrice = prices[l.coinId];
         const value = typeof lotPrice === "number" ? l.remaining * lotPrice : null;
         const invested = typeof l.price === "number" ? l.remaining * l.price : null;
@@ -839,27 +858,54 @@
         const tfDate = taxFreeDate(l.date);
         const days = daysUntil(tfDate);
         const unlocked = days <= 0;
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><span class="coin-tag mono">${coinSymbol(l.coinId)}</span></td>
-          <td>${fmtDate(l.date)}</td>
-          <td>${fmtAmount(l.remaining)}${l.remaining < l.amount ? ` <span style="color:var(--text-muted)">(von ${fmtAmount(l.amount)})</span>` : ""}</td>
-          <td>${l.price !== null ? fmtEUR(l.price) : "–"}</td>
-          <td>${typeof lotPrice === "number" ? fmtEUR(lotPrice) : "–"}</td>
-          <td>${value !== null ? fmtEUR(value) : "–"}</td>
-          <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
-          <td>${fmtDate(tfDate)}</td>
-          <td>${unlocked
-            ? `<span class="badge unlocked">🔓 steuerfrei</span>`
-            : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
-          <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
+        return `
+          <tr>
+            <td>${fmtDate(l.date)}</td>
+            <td>${fmtAmount(l.remaining)}${l.remaining < l.amount ? ` <span style="color:var(--text-muted)">(von ${fmtAmount(l.amount)})</span>` : ""}</td>
+            <td>${l.price !== null ? fmtEUR(l.price) : "–"}</td>
+            <td>${typeof lotPrice === "number" ? fmtEUR(lotPrice) : "–"}</td>
+            <td>${value !== null ? fmtEUR(value) : "–"}</td>
+            <td class="${gv === null ? "" : (gv >= 0 ? "pos" : "neg")}">${gv === null ? "–" : fmtEUR(gv)}</td>
+            <td>${fmtDate(tfDate)}</td>
+            <td>${unlocked
+              ? `<span class="badge unlocked">🔓 steuerfrei</span>`
+              : `<span class="badge locked">🔒 noch ${days} Tag${days===1?"":"e"}</span>`}</td>
+            <td class="row-actions"><button class="danger-ghost" data-del-purchase="${l.id}">Löschen</button></td>
+          </tr>
         `;
-        tbody.appendChild(tr);
+      }).join("");
+
+      const details = document.createElement("details");
+      details.className = "group";
+      if(openPortfolioGroups.has(coinId)) details.open = true;
+      details.innerHTML = `
+        <summary>
+          <span class="g-title">${coinSymbol(coinId)} — ${group.length} Los${group.length === 1 ? "" : "e"} · ${fmtAmount(totalAmount)} · ${totalValue !== null ? fmtEUR(totalValue) : "–"}</span>
+          <span class="chev">▸</span>
+        </summary>
+        <div class="group-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kaufdatum</th><th>Menge</th><th>Ø Kaufkurs</th>
+                  <th>Akt. Kurs</th><th>Akt. Wert</th><th>G/V</th>
+                  <th>Steuerfrei ab</th><th>Status</th><th></th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      details.addEventListener("toggle", () => {
+        if(details.open) openPortfolioGroups.add(coinId);
+        else openPortfolioGroups.delete(coinId);
       });
+      container.appendChild(details);
     });
 
-    tbody.querySelectorAll("[data-del-purchase]").forEach(btn => {
+    container.querySelectorAll("[data-del-purchase]").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-del-purchase");
         if(!confirm("Diesen Kauf (und zugehörige Verkäufe) wirklich löschen?")) return;
@@ -974,30 +1020,64 @@
     });
   }
 
+  const openTimelineGroups = new Set();
+
   function renderTimeline(){
-    const lots = activeLots().sort((a,b) => taxFreeDate(a.date) - taxFreeDate(b.date));
-    const wrap = document.getElementById("taxTimeline");
-    wrap.innerHTML = "";
+    const lots = activeLots();
+    const container = document.getElementById("taxTimelineGroups");
+    container.innerHTML = "";
     document.getElementById("timelineEmpty").style.display = lots.length ? "none" : "block";
 
-    lots.forEach(l => {
-      const tfDate = taxFreeDate(l.date);
-      const days = daysUntil(tfDate);
-      const unlocked = days <= 0;
-      const div = document.createElement("div");
-      div.className = "stub" + (unlocked ? " unlocked" : "");
-      div.innerHTML = `
-        <div class="stub-main">
-          <div class="coin">${coinSymbol(l.coinId)} · ${fmtAmount(l.remaining)}</div>
-          <div class="dates mono">gekauft ${fmtDate(l.date)} → frei ${fmtDate(tfDate)}</div>
-        </div>
-        <div class="stub-status">
-          ${unlocked
-            ? `<span class="badge unlocked">🔓 steuerfrei</span>`
-            : `<span class="badge locked">🔒 in ${days} Tag${days===1?"":"e"}n</span>`}
+    const groups = {};
+    lots.forEach(l => { (groups[l.coinId] = groups[l.coinId] || []).push(l); });
+
+    // Coins mit der am nächsten liegenden Steuerfrei-Datum zuerst
+    const coinIds = Object.keys(groups).sort((a,b) => {
+      const nextA = Math.min(...groups[a].map(l => taxFreeDate(l.date).getTime()));
+      const nextB = Math.min(...groups[b].map(l => taxFreeDate(l.date).getTime()));
+      return nextA - nextB;
+    });
+
+    coinIds.forEach(coinId => {
+      const group = groups[coinId].sort((a,b) => taxFreeDate(a.date) - taxFreeDate(b.date));
+      const unlockedCount = group.filter(l => daysUntil(taxFreeDate(l.date)) <= 0).length;
+
+      const stubs = group.map(l => {
+        const tfDate = taxFreeDate(l.date);
+        const days = daysUntil(tfDate);
+        const unlocked = days <= 0;
+        return `
+          <div class="stub${unlocked ? " unlocked" : ""}">
+            <div class="stub-main">
+              <div class="coin">${coinSymbol(l.coinId)} · ${fmtAmount(l.remaining)}</div>
+              <div class="dates mono">gekauft ${fmtDate(l.date)} → frei ${fmtDate(tfDate)}</div>
+            </div>
+            <div class="stub-status">
+              ${unlocked
+                ? `<span class="badge unlocked">🔓 steuerfrei</span>`
+                : `<span class="badge locked">🔒 in ${days} Tag${days===1?"":"e"}n</span>`}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const details = document.createElement("details");
+      details.className = "group";
+      if(openTimelineGroups.has(coinId)) details.open = true;
+      details.innerHTML = `
+        <summary>
+          <span class="g-title">${coinSymbol(coinId)} — ${group.length} Los${group.length === 1 ? "" : "e"}${unlockedCount > 0 ? ` · ${unlockedCount} frei` : ""}</span>
+          <span class="chev">▸</span>
+        </summary>
+        <div class="group-body">
+          <div class="stub-list">${stubs}</div>
         </div>
       `;
-      wrap.appendChild(div);
+      details.addEventListener("toggle", () => {
+        if(details.open) openTimelineGroups.add(coinId);
+        else openTimelineGroups.delete(coinId);
+      });
+      container.appendChild(details);
     });
   }
 
