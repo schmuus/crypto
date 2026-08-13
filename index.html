@@ -381,21 +381,23 @@
 
   <section>
     <h2><span class="idx">03</span> Portfolio · aktive Lose</h2>
-    <div class="panel table-wrap">
+    <div class="panel">
       <div class="field" style="max-width:260px;margin-bottom:1.1rem;">
         <label for="portfolioFilter">Filter</label>
         <select id="portfolioFilter"></select>
       </div>
-      <table id="portfolioTable">
-        <thead>
-          <tr>
-            <th>Coin</th><th>Kaufdatum</th><th>Menge</th><th>Ø Kaufkurs</th>
-            <th>Akt. Kurs</th><th>Akt. Wert</th><th>G/V</th>
-            <th>Steuerfrei ab</th><th>Status</th><th></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div class="table-wrap">
+        <table id="portfolioTable">
+          <thead>
+            <tr>
+              <th>Coin</th><th>Kaufdatum</th><th>Menge</th><th>Ø Kaufkurs</th>
+              <th>Akt. Kurs</th><th>Akt. Wert</th><th>G/V</th>
+              <th>Steuerfrei ab</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="empty-state" id="portfolioEmpty" style="display:none;">Noch keine Käufe erfasst.</div>
     </div>
   </section>
@@ -404,16 +406,18 @@
     <div class="two-col">
       <div>
         <h2><span class="idx">04</span> Übersicht je Coin</h2>
-        <div class="panel table-wrap">
+        <div class="panel">
           <div class="pie-wrap" id="pieWrap">
             <div class="pie" id="pieChart"><div class="pie-center" id="pieCenter"></div></div>
             <div class="pie-legend" id="pieLegend"></div>
           </div>
           <p class="hint" id="pieHint" style="display:none;">* Coins ohne aktuellen Kurs sind im Diagramm nicht berücksichtigt.</p>
-          <table id="coinSummaryTable">
-            <thead><tr><th>Coin</th><th>Bestand</th><th>Ø Kauf</th><th>Investiert</th><th>Wert</th><th>G/V</th><th>Frei</th><th>Gesperrt</th></tr></thead>
-            <tbody></tbody>
-          </table>
+          <div class="table-wrap">
+            <table id="coinSummaryTable">
+              <thead><tr><th>Coin</th><th>Bestand</th><th>Ø Kauf</th><th>Investiert</th><th>Wert</th><th>G/V</th><th>Frei</th><th>Gesperrt</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
           <div class="empty-state" id="coinSummaryEmpty" style="display:none;">Keine Daten.</div>
         </div>
       </div>
@@ -429,13 +433,15 @@
 
   <section>
     <h2><span class="idx">06</span> Verkaufshistorie</h2>
-    <div class="panel table-wrap">
-      <table id="salesTable">
-        <thead>
-          <tr><th>Verkaufsdatum</th><th>Coin</th><th>Menge</th><th>Verkaufspreis</th><th>Erlös</th><th>Kauflos vom</th><th>G/V</th><th></th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div class="panel">
+      <div class="table-wrap">
+        <table id="salesTable">
+          <thead>
+            <tr><th>Verkaufsdatum</th><th>Coin</th><th>Menge</th><th>Verkaufspreis</th><th>Erlös</th><th>Kauflos vom</th><th>G/V</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="empty-state" id="salesEmpty" style="display:none;">Noch keine Verkäufe erfasst.</div>
     </div>
   </section>
