@@ -243,6 +243,52 @@
     border-radius:8px;
   }
 
+  .pie-wrap{
+    display:flex;
+    gap:1.6rem;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:1.4rem;
+  }
+  .pie{
+    width:150px;
+    height:150px;
+    border-radius:50%;
+    flex-shrink:0;
+    position:relative;
+  }
+  .pie::after{
+    content:"";
+    position:absolute;
+    inset:22%;
+    background:var(--surface);
+    border-radius:50%;
+  }
+  .pie-center{
+    position:absolute;
+    inset:22%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    line-height:1.2;
+  }
+  .pie-center .pc-label{font-size:.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
+  .pie-center .pc-value{font-family:'SF Mono','Menlo','Consolas',monospace;font-size:.78rem;font-weight:600;margin-top:.15rem;}
+  .pie-legend{
+    display:flex;
+    flex-direction:column;
+    gap:.5rem;
+    font-size:.82rem;
+    min-width:150px;
+    flex:1;
+  }
+  .pie-legend-item{display:flex;align-items:center;gap:.55rem;}
+  .pie-swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+  .pie-legend-item .pl-coin{font-family:-apple-system,sans-serif;font-weight:600;}
+  .pie-legend-item .pl-pct{margin-left:auto;font-family:'SF Mono','Menlo','Consolas',monospace;color:var(--text-muted);}
+
   .row-actions button{padding:.3rem .55rem;font-size:.72rem;}
 
   footer.actions-footer{
@@ -359,6 +405,11 @@
       <div>
         <h2><span class="idx">04</span> Übersicht je Coin</h2>
         <div class="panel table-wrap">
+          <div class="pie-wrap" id="pieWrap">
+            <div class="pie" id="pieChart"><div class="pie-center" id="pieCenter"></div></div>
+            <div class="pie-legend" id="pieLegend"></div>
+          </div>
+          <p class="hint" id="pieHint" style="display:none;">* Coins ohne aktuellen Kurs sind im Diagramm nicht berücksichtigt.</p>
           <table id="coinSummaryTable">
             <thead><tr><th>Coin</th><th>Bestand</th><th>Ø Kauf</th><th>Investiert</th><th>Wert</th><th>G/V</th><th>Frei</th><th>Gesperrt</th></tr></thead>
             <tbody></tbody>
@@ -672,7 +723,9 @@
     populateSaleCoinSelect();
     renderSummary();
     renderPortfolioTable();
-    renderCoinSummary();
+    const coinData = computeCoinSummaryData();
+    renderPortfolioChart(coinData);
+    renderCoinSummary(coinData);
     renderTimeline();
     renderSalesTable();
     renderRealizedSummary();
@@ -806,7 +859,9 @@
     });
   }
 
-  function renderCoinSummary(){
+  const CHART_COLORS = ["#c9a227","#4fae7d","#5b8fc7","#c1484b","#9b6bc4","#4bb3c9","#c98a4b","#7d9c4f","#c94b8a","#4b6bc9"];
+
+  function computeCoinSummaryData(){
     const lots = activeLots();
     const byCoin = {};
     lots.forEach(l => {
@@ -835,7 +890,53 @@
       if(days <= 0) g.unlockedAmount += l.remaining;
       else g.lockedAmount += l.remaining;
     });
+    return byCoin;
+  }
 
+  function renderPortfolioChart(byCoin){
+    const coinIds = Object.keys(byCoin)
+      .filter(id => byCoin[id].hasPrice && byCoin[id].value > 0)
+      .sort((a,b) => byCoin[b].value - byCoin[a].value);
+
+    const totalValue = coinIds.reduce((s,id) => s + byCoin[id].value, 0);
+    const hiddenCount = Object.keys(byCoin).length - coinIds.length;
+    document.getElementById("pieHint").style.display = hiddenCount > 0 ? "block" : "none";
+
+    const pie = document.getElementById("pieChart");
+    const center = document.getElementById("pieCenter");
+    const legend = document.getElementById("pieLegend");
+
+    if(coinIds.length === 0 || totalValue <= 0){
+      pie.style.background = "var(--surface-2)";
+      center.innerHTML = `<span class="pc-label">Keine Daten</span>`;
+      legend.innerHTML = `<span style="color:var(--text-muted);font-size:.82rem;">Noch keine bewerteten Bestände.</span>`;
+      return;
+    }
+
+    let cumulative = 0;
+    const stops = [];
+    const legendItems = [];
+    coinIds.forEach((id, i) => {
+      const value = byCoin[id].value;
+      const pct = (value / totalValue) * 100;
+      const color = CHART_COLORS[i % CHART_COLORS.length];
+      stops.push(`${color} ${cumulative}% ${cumulative + pct}%`);
+      cumulative += pct;
+      legendItems.push(`
+        <div class="pie-legend-item">
+          <span class="pie-swatch" style="background:${color};"></span>
+          <span class="pl-coin">${coinSymbol(id)}</span>
+          <span class="pl-pct">${pct.toFixed(1)}%</span>
+        </div>
+      `);
+    });
+
+    pie.style.background = `conic-gradient(${stops.join(", ")})`;
+    center.innerHTML = `<span class="pc-label">Gesamt</span><span class="pc-value">${fmtEUR(totalValue)}</span>`;
+    legend.innerHTML = legendItems.join("");
+  }
+
+  function renderCoinSummary(byCoin){
     const tbody = document.querySelector("#coinSummaryTable tbody");
     tbody.innerHTML = "";
     const coinIds = Object.keys(byCoin);
